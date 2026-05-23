@@ -1,61 +1,61 @@
 const express = require('express');
-const { exec } = require('child_process');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('fs/promises');
+const { exec } = require('child_process');
 
 const app = express();
-const PORT = process.env.PORT || 8080; 
+const PORT = process.env.PORT || 8080;
 
 app.use(cors());
 app.use(express.json());
 
+// Створюємо папку для тимчасових файлів на Railway
+const DOWNLOADS_DIR = './downloads';
+if (!fs.existsSync(DOWNLOADS_DIR)){
+    fs.mkdirSync(DOWNLOADS_DIR);
+}
+
 app.get('/', (req, res) => {
-    res.json({ success: true, message: "Vibe Cloud Proxy Bypass Is Active! 🚀" });
+    res.json({ success: true, message: "Vibe Hard Drive Server Is Active! 💾🚀" });
 });
 
-app.get('/download', (req, res) => {
-    let videoUrl = req.query.url;
+// Ендпоінт, який приймає ВЖЕ РОЗПАРСЕНЕ посилання від твого локального yt-dlp
+app.get('/cloud-download', async (req, res) => {
+    const directUrl = req.query.direct_url;
     const format = req.query.format || 'mp3';
 
-    if (!videoUrl) {
-        return res.status(400).json({ success: false, message: 'Встав посилання!' });
+    if (!directUrl) {
+        return res.status(400).json({ success: false, message: 'Немає прямого потоку!' });
     }
 
-    // Очищаємо посилання від сміття (?si=...)
-    if (videoUrl.includes('?')) videoUrl = videoUrl.split('?')[0];
-    if (videoUrl.includes('&')) videoUrl = videoUrl.split('&')[0];
+    console.log(`💾 Хмара завантажує потік на свій диск...`);
 
-    console.log(`📡 Хмара Railway обробляє запит з обходом: ${videoUrl}`);
+    const filename = `track_${Date.now()}.${format === 'mp3' ? 'mp3' : 'mp4'}`;
+    const outputPath = `${DOWNLOADS_DIR}/${filename}`;
 
-    // ХАК: Додаємо --geo-bypass та маскування під плеєр Android-додатка, щоб обдурити перевірку на бота
-    const bypassArgs = '--geo-bypass --user-agent "Mozilla/5.0 (Android 15; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0" --no-warnings';
-    let ytDlpArgs = format === 'mp3' ? `${bypassArgs} -f "ba" -g` : `${bypassArgs} -f "bv*[height<=720]+ba/b[height<=720]" -g`;
-    
-    const command = `yt-dlp ${ytDlpArgs} "${videoUrl}"`;
-
-    exec(command, (error, stdout) => {
-        const urls = stdout ? stdout.trim().split('\n') : [];
-        const directUrl = urls[0];
-
-        if (directUrl) {
-            const filename = format === 'mp3' ? 'vibe_track.mp3' : 'vibe_video.mp4';
-            
-            // Заголовки примусового скачування
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-            res.setHeader('Content-Type', format === 'mp3' ? 'audio/mpeg' : 'video/mp4');
-
-            // Проксіюємо потік через внутрішній curl сервера
-            const downloadStream = exec(`curl -L "${directUrl}"`);
-            downloadStream.stdout.pipe(res);
-        } else {
-            console.error(`❌ Захист YouTube все одно відхилив запит хмари.`);
-            res.status(500).json({ 
-                success: false, 
-                message: 'YouTube заблокував IP хмари. Якщо цей спосіб не спрацював, доведеться переходити на локальний Termux-сервер.' 
-            });
+    // Скачуємо файл на диск Railway за допомогою curl всередині хмари
+    exec(`curl -L "${directUrl}" -o "${outputPath}"`, (error) => {
+        if (error) {
+            console.error(`❌ Помилка скачування на диск хмари: ${error.message}`);
+            return res.status(500).json({ success: false, message: 'Хмара не змогла зберегти файл' });
         }
+
+        console.log(`✅ Файл успішно збережено на диск Railway: ${filename}`);
+
+        // Віддаємо файл користувачу прямо з жорсткого диска Railway
+        res.download(outputPath, filename, async (err) => {
+            // Після того як користувач скачав файл, видаляємо його з диска Railway, щоб не забивати пам'ять
+            try {
+                await path.unlink(outputPath);
+                console.log(`🧹 Тимчасовий файл видалено з хмари.`);
+            } catch (cleanupError) {
+                console.error(`Не вдалося видалити файл:`, cleanupError.message);
+            }
+        });
     });
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 Сервер успішно запущено на порту ${PORT}`);
+    console.log(`🚀 Дисковий сервер успішно запущено на порту ${PORT}`);
 });
