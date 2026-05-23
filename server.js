@@ -9,7 +9,7 @@ app.use(cors());
 app.use(express.json());
 
 app.get('/', (req, res) => {
-    res.json({ success: true, message: "Vibe Proxy Downloader API is Active! 🚀" });
+    res.json({ success: true, message: "Vibe Cloud Proxy Bypass Is Active! 🚀" });
 });
 
 app.get('/download', (req, res) => {
@@ -17,44 +17,41 @@ app.get('/download', (req, res) => {
     const format = req.query.format || 'mp3';
 
     if (!videoUrl) {
-        return res.status(400).json({ success: false, message: 'Встав посилання на відео!' });
+        return res.status(400).json({ success: false, message: 'Встав посилання!' });
     }
 
-    // Хак: Очищаємо посилання від сміття типу ?si=... або &feature=...
-    if (videoUrl.includes('?')) {
-        videoUrl = videoUrl.split('?')[0];
-    }
-    if (videoUrl.includes('&')) {
-        videoUrl = videoUrl.split('&')[0];
-    }
+    // Очищаємо посилання від сміття (?si=...)
+    if (videoUrl.includes('?')) videoUrl = videoUrl.split('?')[0];
+    if (videoUrl.includes('&')) videoUrl = videoUrl.split('&')[0];
 
-    console.log(`📡 Хмарний проксі обробляє очищений лінк: ${videoUrl}, формат: ${format}`);
+    console.log(`📡 Хмара Railway обробляє запит з обходом: ${videoUrl}`);
 
-    // Додаємо прапори --no-warnings, щоб дрібні варнінги не ламали процес виконання команди exec
-    let ytDlpArgs = format === 'mp3' ? '--no-warnings -f "ba" -g' : `--no-warnings -f "bv*[height<=720]+ba/b[height<=720]" -g`;
+    // ХАК: Додаємо --geo-bypass та маскування під плеєр Android-додатка, щоб обдурити перевірку на бота
+    const bypassArgs = '--geo-bypass --user-agent "Mozilla/5.0 (Android 15; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0" --no-warnings';
+    let ytDlpArgs = format === 'mp3' ? `${bypassArgs} -f "ba" -g` : `${bypassArgs} -f "bv*[height<=720]+ba/b[height<=720]" -g`;
+    
     const command = `yt-dlp ${ytDlpArgs} "${videoUrl}"`;
 
     exec(command, (error, stdout) => {
-        // Якщо є помилка, але при цьому stdout не порожній (лінк все одно прийшов), ігноруємо помилку
         const urls = stdout ? stdout.trim().split('\n') : [];
         const directUrl = urls[0];
-
-        if (!directUrl && error) {
-            console.error(`❌ Критична помилка yt-dlp: ${error.message}`);
-            return res.status(500).json({ success: false, message: 'yt-dlp не зміг отримати лінк з серверів YouTube' });
-        }
 
         if (directUrl) {
             const filename = format === 'mp3' ? 'vibe_track.mp3' : 'vibe_video.mp4';
             
+            // Заголовки примусового скачування
             res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
             res.setHeader('Content-Type', format === 'mp3' ? 'audio/mpeg' : 'video/mp4');
 
-            // Транслюємо потік через curl
+            // Проксіюємо потік через внутрішній curl сервера
             const downloadStream = exec(`curl -L "${directUrl}"`);
             downloadStream.stdout.pipe(res);
         } else {
-            res.status(500).json({ success: false, message: 'Не вдалося згенерувати потік медіа' });
+            console.error(`❌ Захист YouTube все одно відхилив запит хмари.`);
+            res.status(500).json({ 
+                success: false, 
+                message: 'YouTube заблокував IP хмари. Якщо цей спосіб не спрацював, доведеться переходити на локальний Termux-сервер.' 
+            });
         }
     });
 });
